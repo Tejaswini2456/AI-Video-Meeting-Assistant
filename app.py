@@ -1,13 +1,26 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import streamlit as st
 import time
-from dotenv import load_dotenv
+import os
 from utils.audio_processor import process_input
-from core.transcriber import transcribe_all
+from core.transcriber import transcribe_all, get_transcription_engine
 from core.summarizer import summarize, generate_title
-from core.extractor import extract_action_items, extract_key_decisions, extract_questions
+from core.extractor import (
+    extract_action_items,
+    extract_key_decisions,
+    extract_questions,
+    extract_timestamped_topics,
+)
 from core.rag_engine import build_rag_chain, ask_question
-
-load_dotenv()
+from utils.exporter import generate_pdf_report, generate_markdown_report
+from utils.history_manager import (
+    save_meeting,
+    load_all_meetings,
+    get_meeting_by_id,
+    delete_meeting,
+)
 
 # ─── Page Config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -22,7 +35,6 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
-/* ── Root Variables ── */
 :root {
     --bg: #0a0a0f;
     --surface: #111118;
@@ -38,7 +50,6 @@ st.markdown("""
     --danger: #ef4444;
 }
 
-/* ── Global Reset ── */
 html, body, [class*="css"] {
     font-family: 'JetBrains Mono', monospace;
     background-color: var(--bg) !important;
@@ -49,7 +60,6 @@ html, body, [class*="css"] {
     background: var(--bg) !important;
 }
 
-/* Animated grid background */
 .stApp::before {
     content: '';
     position: fixed;
@@ -63,7 +73,6 @@ html, body, [class*="css"] {
     z-index: 0;
 }
 
-/* ── Sidebar ── */
 [data-testid="stSidebar"] {
     background: var(--surface) !important;
     border-right: 1px solid var(--border) !important;
@@ -73,13 +82,11 @@ html, body, [class*="css"] {
     color: var(--text) !important;
 }
 
-/* ── Headings ── */
 h1, h2, h3, h4, h5, h6 {
     font-family: 'Syne', sans-serif !important;
     color: var(--text) !important;
 }
 
-/* ── Hero Title ── */
 .hero-title {
     font-family: 'Syne', sans-serif;
     font-size: clamp(2rem, 5vw, 3.5rem);
@@ -101,7 +108,6 @@ h1, h2, h3, h4, h5, h6 {
     margin-top: 0.5rem;
 }
 
-/* ── Cards ── */
 .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -144,7 +150,26 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--text);
 }
 
-/* ── Accent Badge ── */
+.metric-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+}
+.metric-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--accent-glow);
+}
+.metric-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
 .badge {
     display: inline-block;
     padding: 0.2rem 0.6rem;
@@ -159,7 +184,6 @@ h1, h2, h3, h4, h5, h6 {
 .badge-cyan   { background: rgba(6,182,212,0.15); color: var(--accent-2);    border: 1px solid rgba(6,182,212,0.3); }
 .badge-green  { background: rgba(16,185,129,0.15); color: var(--success);    border: 1px solid rgba(16,185,129,0.3); }
 
-/* ── Input & Buttons ── */
 .stTextInput > div > div > input,
 .stSelectbox > div > div {
     background: var(--surface-2) !important;
@@ -167,11 +191,6 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: 8px !important;
     color: var(--text) !important;
     font-family: 'JetBrains Mono', monospace !important;
-}
-
-.stTextInput > div > div > input:focus {
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 2px rgba(124,58,237,0.2) !important;
 }
 
 .stButton > button {
@@ -193,13 +212,6 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: 0 8px 25px rgba(124,58,237,0.4) !important;
 }
 
-/* Secondary button */
-.stButton > button[kind="secondary"] {
-    background: var(--surface-2) !important;
-    border: 1px solid var(--border) !important;
-}
-
-/* ── Progress / Status ── */
 .status-bar {
     display: flex;
     align-items: center;
@@ -227,7 +239,6 @@ h1, h2, h3, h4, h5, h6 {
     50%       { opacity: 0.4; }
 }
 
-/* ── Chat ── */
 .chat-container {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -267,14 +278,12 @@ h1, h2, h3, h4, h5, h6 {
 .user-bubble { background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.25); align-self: flex-end; }
 .bot-bubble  { background: rgba(6,182,212,0.1);  border: 1px solid rgba(6,182,212,0.2);   align-self: flex-start; }
 
-/* ── Divider ── */
 hr {
     border: none !important;
     border-top: 1px solid var(--border) !important;
     margin: 1.5rem 0 !important;
 }
 
-/* ── Transcript box ── */
 .transcript-box {
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -288,18 +297,6 @@ hr {
     white-space: pre-wrap;
     word-break: break-word;
 }
-
-/* ── Stale Streamlit elements ── */
-.stProgress > div > div > div { background: var(--accent) !important; }
-.stSpinner > div { border-top-color: var(--accent) !important; }
-[data-testid="stMarkdownContainer"] p { color: var(--text) !important; }
-label { color: var(--text-muted) !important; font-size: 0.8rem !important; }
-
-/* scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -315,6 +312,20 @@ for key, default in {
         st.session_state[key] = default
 
 # ─── Helpers ────────────────────────────────────────────────────────────────────
+LANGUAGE_OPTIONS = {
+    "🇬🇧 English": "english",
+    "🇮🇳 Telugu (తెలుగు)": "telugu",
+    "🇮🇳 Hindi / Hinglish (हिंदी)": "hinglish",
+    "🇮🇳 Tamil (தமிழ்)": "tamil",
+    "🇮🇳 Kannada (ಕನ್ನಡ)": "kannada",
+    "🇮🇳 Malayalam (മലയാളം)": "malayalam",
+    "🇮🇳 Bengali (বাংলা)": "bengali",
+    "🇮🇳 Gujarati (ગુજરાતી)": "gujarati",
+    "🇮🇳 Marathi (मराठी)": "marathi",
+    "🇮🇳 Punjabi (ਪੰਜਾਬੀ)": "punjabi",
+    "🌐 Auto-Detect / Global Language": "auto",
+}
+
 def step_status(steps: dict, key: str) -> str:
     s = steps.get(key, "pending")
     if s == "active":  return "dot-active"
@@ -338,9 +349,65 @@ with st.sidebar:
     st.markdown('<span class="badge badge-purple">Input</span>', unsafe_allow_html=True)
     source = st.text_input("YouTube URL or File Path", placeholder="https://youtube.com/watch?v=... or /path/to/file.mp4")
 
-    language = st.selectbox("Language", ["english", "hinglish"], index=0)
+    selected_lang_label = st.selectbox("Speech Language", list(LANGUAGE_OPTIONS.keys()), index=0)
+    language = LANGUAGE_OPTIONS[selected_lang_label]
+
+    # Engine indicator (High Contrast Badge)
+    engine_name = get_transcription_engine(language)
+    st.markdown(f"""
+    <div style="
+        background: rgba(124, 58, 237, 0.15);
+        border: 1px solid rgba(124, 58, 237, 0.4);
+        border-radius: 8px;
+        padding: 0.5rem 0.75rem;
+        margin-top: 0.4rem;
+        margin-bottom: 0.8rem;
+        font-size: 0.78rem;
+        color: #e8e8f0;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        word-break: break-word;
+    ">
+        <span>⚡ <strong>Engine:</strong></span>
+        <span style="color:#9f67ff; font-weight:600">{engine_name}</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ⚙️ Advanced Settings Expander
+    with st.expander("⚙️ Advanced Settings", expanded=False):
+        whisper_model_choice = st.selectbox("Whisper Model", ["small", "base", "tiny"], index=0)
+        os.environ["WHISPER_MODEL"] = whisper_model_choice
 
     run_btn = st.button("⚡  Analyse", use_container_width=True)
+
+    # 📚 Saved Meetings Library
+    st.markdown("---")
+    st.markdown('<span class="badge badge-cyan">📚 Saved Meetings</span>', unsafe_allow_html=True)
+    saved_meetings = load_all_meetings()
+    if saved_meetings:
+        meeting_titles = {f"{m.get('title', 'Untitled')} ({m.get('timestamp', '')[:10]})": m['id'] for m in saved_meetings}
+        selected_mtg_title = st.selectbox("Load Previous Session", list(meeting_titles.keys()))
+        col_load, col_del = st.columns(2)
+        with col_load:
+            if st.button("📂 Load", use_container_width=True):
+                mtg_id = meeting_titles[selected_mtg_title]
+                data = get_meeting_by_id(mtg_id)
+                if data:
+                    with st.spinner("Rebuilding RAG Index..."):
+                        rag_chain = build_rag_chain(data["transcript"])
+                        data["rag_chain"] = rag_chain
+                        st.session_state.result = data
+                        st.session_state.pipeline_done = True
+                        st.session_state.chat_history = []
+                    st.rerun()
+        with col_del:
+            if st.button("🗑️ Delete", use_container_width=True):
+                mtg_id = meeting_titles[selected_mtg_title]
+                delete_meeting(mtg_id)
+                st.rerun()
+    else:
+        st.caption("No saved sessions found yet.")
 
     if st.session_state.pipeline_done:
         st.markdown("---")
@@ -357,7 +424,7 @@ with st.sidebar:
 
 # ─── Main Area ──────────────────────────────────────────────────────────────────
 st.markdown('<div class="hero-title">AI Video Assistant</div>', unsafe_allow_html=True)
-st.markdown('<div class="hero-sub">Transcribe · Summarise · Chat with your meetings</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-sub">Transcribe · Summarise · Export · Chat with your meetings</div>', unsafe_allow_html=True)
 st.markdown("---")
 
 # ── Run Pipeline ────────────────────────────────────────────────────────────────
@@ -380,7 +447,7 @@ if run_btn:
                 st.info("⚙️ Pipeline running — see sidebar for live status…")
 
             update_step("audio", "active")
-            chunks = process_input(source)
+            chunks, wav_path, duration_sec = process_input(source)
             update_step("audio", "done")
 
             update_step("transcript", "active")
@@ -396,24 +463,35 @@ if run_btn:
             update_step("summary", "done")
 
             update_step("extract", "active")
-            action_items  = extract_action_items(transcript)
-            decisions     = extract_key_decisions(transcript)
-            questions     = extract_questions(transcript)
+            action_items       = extract_action_items(transcript)
+            decisions          = extract_key_decisions(transcript)
+            questions          = extract_questions(transcript)
+            timestamped_topics = extract_timestamped_topics(transcript, duration_sec)
             update_step("extract", "done")
 
             update_step("rag", "active")
             rag_chain = build_rag_chain(transcript)
             update_step("rag", "done")
 
-            st.session_state.result = {
+            res = {
+                "source": source,
+                "language": language,
                 "title": title,
                 "transcript": transcript,
                 "summary": summary,
                 "action_items": action_items,
                 "key_decisions": decisions,
                 "open_questions": questions,
+                "timestamped_topics": timestamped_topics,
+                "audio_path": wav_path,
+                "duration_sec": duration_sec,
                 "rag_chain": rag_chain,
             }
+
+            # Save to persistent history
+            save_meeting(res)
+
+            st.session_state.result = res
             st.session_state.pipeline_done = True
             progress_placeholder.success("✅ Analysis complete!")
             time.sleep(0.5)
@@ -426,26 +504,94 @@ if run_btn:
                     st.session_state.pipeline_steps[k] = "pending"
             progress_placeholder.error(f"❌ Error: {e}")
 
-# ── Results ──────────────────────────────────────────────────────────────────────
+# ── Results Area ─────────────────────────────────────────────────────────────────
 if st.session_state.result:
     r = st.session_state.result
 
-    # Title banner
-    st.markdown(f"""
-    <div class="card">
-        <div class="card-title">📌 Session Title</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:700;color:var(--text)">
-            {r['title']}
-        </div>
-    </div>""", unsafe_allow_html=True)
+    # Title Banner & Actions
+    title_col, btn_col1, btn_col2 = st.columns([4, 1.5, 1.5], gap="small")
 
-    # Top row: summary + transcript
+    with title_col:
+        st.markdown(f"""
+        <div class="card" style="margin-bottom:0">
+            <div class="card-title">📌 Session Title</div>
+            <div style="font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text)">
+                {r['title']}
+            </div>
+        </div>""", unsafe_allow_html=True)
+
+    with btn_col1:
+        pdf_bytes = generate_pdf_report(r)
+        st.download_button(
+            label="📥 Download PDF",
+            data=pdf_bytes,
+            file_name=f"{r.get('title','report')[:20]}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+
+    with btn_col2:
+        md_text = generate_markdown_report(r)
+        st.download_button(
+            label="📝 Download MD",
+            data=md_text,
+            file_name=f"{r.get('title','report')[:20]}.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 📊 Analytics Dashboard Header
+    m1, m2, m3, m4 = st.columns(4)
+    duration_min = int(r.get("duration_sec", 0) // 60)
+    duration_s = int(r.get("duration_sec", 0) % 60)
+    word_count = len(r.get("transcript", "").split())
+    read_time = max(1, word_count // 200)
+
+    with m1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">⏱️ {duration_min}m {duration_s}s</div>
+            <div class="metric-label">Audio Duration</div>
+        </div>""", unsafe_allow_html=True)
+    with m2:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">💬 {word_count:,}</div>
+            <div class="metric-label">Total Words</div>
+        </div>""", unsafe_allow_html=True)
+    with m3:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">📖 ~{read_time} min</div>
+            <div class="metric-label">Reading Time</div>
+        </div>""", unsafe_allow_html=True)
+    with m4:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">🌐 {r.get('language','english').title()}</div>
+            <div class="metric-label">Language Mode</div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # 🎧 Master Audio Player & Timestamped Topics
+    if r.get("audio_path") and os.path.exists(r.get("audio_path")):
+        st.markdown('<div class="card-title">🎧 Master Audio Playback</div>', unsafe_allow_html=True)
+        st.audio(r["audio_path"])
+
+    if r.get("timestamped_topics"):
+        with st.expander("📌 Timestamped Agenda & Key Moments", expanded=False):
+            st.markdown(f'<div class="card-content">{r["timestamped_topics"]}</div>', unsafe_allow_html=True)
+
+    # Summary & Transcript Split
     col1, col2 = st.columns([3, 2], gap="medium")
 
     with col1:
         st.markdown(f"""
         <div class="card">
-            <div class="card-title">📋 Summary</div>
+            <div class="card-title">📋 Executive Summary</div>
             <div class="card-content">{r['summary']}</div>
         </div>""", unsafe_allow_html=True)
 
@@ -453,7 +599,7 @@ if st.session_state.result:
         with st.expander("📝 Full Transcript", expanded=False):
             st.markdown(f'<div class="transcript-box">{r["transcript"]}</div>', unsafe_allow_html=True)
 
-    # Second row: action items | decisions | questions
+    # Action Items | Key Decisions | Open Questions
     c1, c2, c3 = st.columns(3, gap="medium")
 
     with c1:
@@ -482,7 +628,6 @@ if st.session_state.result:
     # ── RAG Chat ──────────────────────────────────────────────────────────────
     st.markdown('<div style="font-family:\'Syne\',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:1rem">💬 Chat with your Meeting</div>', unsafe_allow_html=True)
 
-    # Chat history display
     if st.session_state.chat_history:
         chat_html = '<div class="chat-container">'
         for msg in st.session_state.chat_history:
@@ -507,7 +652,6 @@ if st.session_state.result:
             <div style="color:var(--text-muted);font-size:0.85rem">Ask anything about your meeting transcript</div>
         </div>""", unsafe_allow_html=True)
 
-    # Chat input
     chat_col1, chat_col2 = st.columns([5, 1], gap="small")
     with chat_col1:
         user_input = st.text_input("Your question", placeholder="What were the main decisions made?", label_visibility="collapsed")
@@ -538,8 +682,8 @@ else:
             Paste a YouTube URL or local file path in the sidebar, choose your language, and hit <strong>Analyse</strong> to get started.
         </div>
         <div style="margin-top:2rem;display:flex;gap:1rem;flex-wrap:wrap;justify-content:center">
-            <span class="badge badge-purple">Transcription</span>
-            <span class="badge badge-cyan">Summarisation</span>
-            <span class="badge badge-green">RAG Chat</span>
+            <span class="badge badge-purple">Multi-Language STT</span>
+            <span class="badge badge-cyan">PDF & MD Export</span>
+            <span class="badge badge-green">Meeting History</span>
         </div>
     </div>""", unsafe_allow_html=True)

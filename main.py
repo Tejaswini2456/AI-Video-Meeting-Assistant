@@ -11,9 +11,9 @@ load_dotenv()
 def run_pipeline(source :str, language :str = "english") -> dict:
     print("starting AI Video Assistant")
 
-    chunks = process_input(source)
+    chunks, wav_path, duration_sec = process_input(source)
 
-    transcript = transcribe_all(chunks,language)
+    transcript = transcribe_all(chunks, language)
     print(f"raw transcription (first 300 characters ) {transcript[:300]}")
 
     title = generate_title(transcript)
@@ -35,12 +35,14 @@ def run_pipeline(source :str, language :str = "english") -> dict:
         "key_decisions": decisions,
         "open_questions": questions,
         "rag_chain": rag_chain,
+        "audio_path": wav_path,
+        "duration_sec": duration_sec,
     }
 
 if __name__ == "__main__":
     # CLI entry point
     source = input("Enter YouTube URL or local file path: ").strip()
-    language = input("Language (english/hinglish): ").strip() or "english"
+    language = input("Language (english / telugu / hindi / tamil / kannada / auto): ").strip() or "english"
     result = run_pipeline(source, language)
 
     print("\n" + "=" * 60)

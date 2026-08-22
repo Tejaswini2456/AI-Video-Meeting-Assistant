@@ -50,3 +50,22 @@ def extract_questions(transcript: str) -> str:
         "If none found say 'No open questions found.'"
     )
     return chain.invoke(transcript)
+
+
+def extract_timestamped_topics(transcript: str, duration_sec: float = 0) -> str:
+    duration_prompt = ""
+    if duration_sec > 0:
+        m = int(duration_sec // 60)
+        s = int(duration_sec % 60)
+        max_ts = f"{m:02d}:{s:02d}"
+        duration_prompt = (
+            f" CRITICAL CONSTRAINT: The total audio/video length is EXACTLY {max_ts} ({int(duration_sec)} seconds). "
+            f"ALL timestamps MUST stay strictly within [00:00] to [{max_ts}]. "
+            f"Under NO circumstances should any timestamp exceed [{max_ts}]."
+        )
+
+    chain = build_chain(
+        "From the meeting transcript, extract a chronological outline of key topics discussed with "
+        f"accurate timestamp ranges.{duration_prompt} Format as a clean bulleted list."
+    )
+    return chain.invoke(transcript)

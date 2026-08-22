@@ -29,21 +29,31 @@ def load_model():
     return _model 
 
 
-def transcribe_chunk_whisper(chunk_path: str) -> str:
+INDIAN_LANGUAGES = {
+    "hinglish", "hindi", "telugu", "tamil", "kannada",
+    "malayalam", "bengali", "gujarati", "marathi", "punjabi", "odia"
+}
+
+
+def transcribe_chunk_whisper(chunk_path: str, task: str = "transcribe") -> str:
 
     model = load_model()  
 
-    result = model.transcribe(chunk_path, task="transcribe")  
+    result = model.transcribe(chunk_path, task=task)  
     return result["text"]  
 
 
+def _get_sarvam_api_key() -> str:
+    return os.getenv("SARVAM_API_KEY") or SARVAM_API_KEY
+
 def _send_to_sarvam(piece_path: str) -> str:
     """Send one ≤30s WAV file to Sarvam and return the English transcript."""
-    headers = {"api-subscription-key": SARVAM_API_KEY}
+    api_key = _get_sarvam_api_key()
+    headers = {"api-subscription-key": api_key}
 
     with open(piece_path, "rb") as f:
         files = {"file": (os.path.basename(piece_path), f, "audio/wav")}
-        data = {"model": SARVAM_MODEL, "with_diarization": "false"}
+        data = {"model": os.getenv("SARVAM_STT_MODEL", SARVAM_MODEL), "with_diarization": "false"}
         response = requests.post(
             SARVAM_STT_TRANSLATE_URL,
             headers=headers,
@@ -65,7 +75,8 @@ def transcribe_chunk_sarvam(chunk_path: str) -> str:
     Sarvam sync API only accepts ≤30s audio. We split this chunk into
     25-second pieces, send each separately, and join the transcripts.
     """
-    if not SARVAM_API_KEY:
+    api_key = _get_sarvam_api_key()
+    if not api_key:
         raise RuntimeError("SARVAM_API_KEY is not set in environment / .env")
 
     audio = AudioSegment.from_wav(chunk_path)
@@ -88,27 +99,42 @@ def transcribe_chunk_sarvam(chunk_path: str) -> str:
 
     return full_text.strip()
 
-   
-
-
 
 def transcribe_chunk(chunk_path: str, language: str = "english") -> str:
     """
-    Route one chunk to Whisper or Sarvam depending on language choice.
-    - english  → Whisper (local model)
-    - hinglish → Sarvam (translates to English while transcribing)
+    Route chunk to Sarvam or Whisper based on language choice:
+    - english  → Whisper (local model, transcribe)
+    - Indian languages (telugu, hinglish/hindi, tamil, etc.) → Sarvam AI (if key set), else Whisper (translate)
+    - auto / other → Whisper (local model, translate to English)
     """
-    if language.lower() == "hinglish":
+    lang = language.lower().strip()
+    if lang == "english":
+        return transcribe_chunk_whisper(chunk_path, task="transcribe")
+
+    api_key = _get_sarvam_api_key()
+    if lang in INDIAN_LANGUAGES and api_key:
         return transcribe_chunk_sarvam(chunk_path)
-    return transcribe_chunk_whisper(chunk_path)
+
+    # Fallback / Global translation to English via Whisper
+    return transcribe_chunk_whisper(chunk_path, task="translate")
+
+
+def get_transcription_engine(language: str = "english") -> str:
+    """Helper to get descriptive engine name being used."""
+    lang = language.lower().strip()
+    if lang == "english":
+        return "Whisper (Local Transcribe)"
+    api_key = _get_sarvam_api_key()
+    if lang in INDIAN_LANGUAGES and api_key:
+        return f"Sarvam AI ({lang.title()} -> English STT Translate)"
+    return f"Whisper (Local {lang.title()} -> English Translate)"
 
 
 def transcribe_all(chunks: list, language: str = "english") -> str:
 
     full_transcript = "" 
-
-    engine = "Sarvam AI" if language.lower() == "hinglish" else "Whisper"
-    print(f"Using {engine} for transcription.")
+    engine_name = get_transcription_engine(language)
+    print(f"Using {engine_name} for transcription.")
 
     for i, chunk in enumerate(chunks):  
 
