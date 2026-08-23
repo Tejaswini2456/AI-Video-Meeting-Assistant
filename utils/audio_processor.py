@@ -20,17 +20,45 @@ def fetch_youtube_transcript_api(url: str):
     
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
-        transcript_list = YouTubeTranscriptApi.get_transcript(
-            video_id,
-            languages=['en', 'hi', 'te', 'ta', 'kn', 'ml', 'mr', 'gu', 'bn', 'pa', 'auto']
-        )
-        full_text = " ".join([item['text'] for item in transcript_list])
-        last_item = transcript_list[-1]
-        duration_sec = float(last_item['start'] + last_item.get('duration', 0.0))
-        return full_text, duration_sec
+        api = YouTubeTranscriptApi() if callable(YouTubeTranscriptApi) else None
+        fetched_snippets = None
+        
+        # Method 1: Using instance list/fetch (v1.2.4+)
+        if api and hasattr(api, "list"):
+            try:
+                transcript_list = api.list(video_id)
+                for t in transcript_list:
+                    fetched_snippets = t.fetch()
+                    if fetched_snippets:
+                        break
+            except Exception as e1:
+                print(f"api.list failed: {e1}")
+                
+        # Method 2: Using static get_transcript
+        if not fetched_snippets and hasattr(YouTubeTranscriptApi, "get_transcript"):
+            try:
+                raw_data = YouTubeTranscriptApi.get_transcript(video_id)
+                full_text = " ".join([item['text'] if isinstance(item, dict) else item.text for item in raw_data])
+                last_item = raw_data[-1]
+                start_val = last_item['start'] if isinstance(last_item, dict) else last_item.start
+                dur_val = last_item.get('duration', 0.0) if isinstance(last_item, dict) else getattr(last_item, 'duration', 0.0)
+                duration_sec = float(start_val + dur_val)
+                return full_text, duration_sec
+            except Exception as e2:
+                print(f"get_transcript failed: {e2}")
+
+        if fetched_snippets:
+            full_text = " ".join([snippet.text if hasattr(snippet, "text") else snippet["text"] for snippet in fetched_snippets])
+            last_item = fetched_snippets[-1]
+            start_val = last_item.start if hasattr(last_item, "start") else last_item.get("start", 0.0)
+            dur_val = last_item.duration if hasattr(last_item, "duration") else last_item.get("duration", 0.0)
+            duration_sec = float(start_val + dur_val)
+            return full_text, duration_sec
+
     except Exception as e:
-        print(f"youtube-transcript-api fallback to yt-dlp: {e}")
-        return None, 0.0
+        print(f"youtube-transcript-api extraction failed: {e}")
+
+    return None, 0.0
 
 def download_youtube_audio(url: str) -> str:
     output_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
