@@ -1,14 +1,40 @@
 import yt_dlp
 from pydub import AudioSegment
 import os
+import re
 
 DOWNLOAD_DIR = 'downloades'
-os.makedirs(DOWNLOAD_DIR,exist_ok = True)
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+def extract_youtube_video_id(url: str) -> str:
+    pattern = r'(?:v=|\/|be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})'
+    match = re.search(pattern, url)
+    if match:
+        return match.group(1)
+    return None
+
+def fetch_youtube_transcript_api(url: str):
+    video_id = extract_youtube_video_id(url)
+    if not video_id:
+        return None, 0.0
+    
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        transcript_list = YouTubeTranscriptApi.get_transcript(
+            video_id,
+            languages=['en', 'hi', 'te', 'ta', 'kn', 'ml', 'mr', 'gu', 'bn', 'pa', 'auto']
+        )
+        full_text = " ".join([item['text'] for item in transcript_list])
+        last_item = transcript_list[-1]
+        duration_sec = float(last_item['start'] + last_item.get('duration', 0.0))
+        return full_text, duration_sec
+    except Exception as e:
+        print(f"youtube-transcript-api fallback to yt-dlp: {e}")
+        return None, 0.0
 
 def download_youtube_audio(url: str) -> str:
     output_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
     
-    # Client configurations order for cloud hosting (iOS and TV bypass 403 po_token blocks)
     client_configs = [
         ["ios"],
         ["android_vr"],
@@ -69,13 +95,14 @@ def download_youtube_audio(url: str) -> str:
         "quiet": True,
         "nocheckcertificate": True,
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        raw_filename = ydl.prepare_filename(info)
-        filename = os.path.splitext(raw_filename)[0] + ".wav"
-        return filename
-
-
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            raw_filename = ydl.prepare_filename(info)
+            filename = os.path.splitext(raw_filename)[0] + ".wav"
+            return filename
+    except Exception as e:
+        raise RuntimeError("YouTube 403 Forbidden: YouTube blocked direct audio stream downloading on this cloud server. Please try a video with captions, or upload your media file (.mp4, .mp3, .wav) directly using the File Uploader in the sidebar.") from e
 
 def convert_to_wav(input_path: str) -> str:
     """Convert any audio/video file to WAV format using pydub."""
@@ -85,18 +112,16 @@ def convert_to_wav(input_path: str) -> str:
     audio.export(output_path, format="wav")
     return output_path
 
-
-
-def chunk_audio(wav_path : str , chunk_minutes : int = 10) -> list:
+def chunk_audio(wav_path: str, chunk_minutes: int = 10) -> list:
     audio = AudioSegment.from_wav(wav_path)
     chunk_ms = chunk_minutes * 60 * 1000 
 
     chunks = []
 
-    for i, start in enumerate(range(0,len(audio),chunk_ms)):
-        chunk = audio[start : start + chunk_ms]
+    for i, start in enumerate(range(0, len(audio), chunk_ms)):
+        chunk = audio[start: start + chunk_ms]
         chunk_path = f"{wav_path}_chunk_{i}.wav"
-        chunk.export(chunk_path , format = "wav")
+        chunk.export(chunk_path, format="wav")
 
         chunks.append(chunk_path)
     
@@ -104,10 +129,16 @@ def chunk_audio(wav_path : str , chunk_minutes : int = 10) -> list:
 
 def process_input(source: str) -> tuple:
     if source.startswith("http://") or source.startswith("https://"):
-        print("Detected YouTube URL. Downloading audio...")
+        print("Detected YouTube URL. Attempting transcript API extraction...")
+        transcript, duration_sec = fetch_youtube_transcript_api(source)
+        if transcript:
+            print("Successfully extracted YouTube transcript via API!")
+            return transcript, None, duration_sec
+        
+        print("Transcript API unavailable. Falling back to audio download via yt-dlp...")
         wav_path = download_youtube_audio(source)
     else:
-        print("Detected local file. Converting to WAV...")
+        print("Detected local/uploaded file. Converting to WAV...")
         wav_path = convert_to_wav(source)
 
     audio = AudioSegment.from_wav(wav_path)
@@ -117,5 +148,6 @@ def process_input(source: str) -> tuple:
     chunks = chunk_audio(wav_path)
     print(f"Audio ready — {len(chunks)} chunk(s) created.")
     return chunks, wav_path, duration_sec
+
 
 

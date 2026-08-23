@@ -361,8 +361,19 @@ with st.sidebar:
     st.markdown('<div class="hero-sub">Meeting Intelligence</div>', unsafe_allow_html=True)
     st.markdown("---")
 
-    st.markdown('<span class="badge badge-purple">Input</span>', unsafe_allow_html=True)
-    source = st.text_input("YouTube URL or File Path", placeholder="https://youtube.com/watch?v=... or /path/to/file.mp4")
+    st.markdown('<span class="badge badge-purple">Input Source</span>', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("Upload Media (.mp4, .mp3, .wav, .m4a)", type=["mp4", "mp3", "wav", "m4a", "webm"])
+    url_input = st.text_input("Or paste YouTube URL", placeholder="https://youtube.com/watch?v=...")
+
+    source = ""
+    if uploaded_file is not None:
+        save_dir = "downloades"
+        os.makedirs(save_dir, exist_ok=True)
+        source = os.path.join(save_dir, uploaded_file.name)
+        with open(source, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+    elif url_input.strip():
+        source = url_input.strip()
 
     selected_lang_label = st.selectbox("Speech Language", list(LANGUAGE_OPTIONS.keys()), index=0)
     language = LANGUAGE_OPTIONS[selected_lang_label]

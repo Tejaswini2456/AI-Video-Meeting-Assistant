@@ -130,20 +130,19 @@ def get_transcription_engine(language: str = "english") -> str:
     return f"Whisper (Local {lang.title()} -> English Translate)"
 
 
-def transcribe_all(chunks: list, language: str = "english") -> str:
+def transcribe_all(chunks, language: str = "english") -> str:
+    if isinstance(chunks, str):
+        print("Using direct transcript extracted via API.")
+        return chunks.strip()
 
     full_transcript = "" 
     engine_name = get_transcription_engine(language)
     print(f"Using {engine_name} for transcription.")
 
     for i, chunk in enumerate(chunks):  
-
         print(f"Transcribing chunk {i + 1}/{len(chunks)}...")
-
         text = transcribe_chunk(chunk, language=language)  
-
         full_transcript += text + " "  
 
     print("Transcription complete.")
-
     return full_transcript.strip()  
