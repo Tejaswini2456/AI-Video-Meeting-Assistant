@@ -8,13 +8,54 @@ os.makedirs(DOWNLOAD_DIR,exist_ok = True)
 def download_youtube_audio(url: str) -> str:
     output_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
     
+    # Client configurations order for cloud hosting (iOS and TV bypass 403 po_token blocks)
+    client_configs = [
+        ["ios"],
+        ["android_vr"],
+        ["tv_embedded"],
+        ["mweb"],
+        ["android"],
+    ]
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-us,en;q=0.5",
-        "Sec-Fetch-Mode": "navigate",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
     }
     
+    for client in client_configs:
+        ydl_opts = {
+            "format": "m4a/ba/b",
+            "outtmpl": output_path,
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "wav",
+                    "preferredquality": "192",
+                }
+            ],
+            "quiet": True,
+            "nocheckcertificate": True,
+            "geo_bypass": True,
+            "user_agent": headers["User-Agent"],
+            "http_headers": headers,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": client
+                }
+            },
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                raw_filename = ydl.prepare_filename(info)
+                filename = os.path.splitext(raw_filename)[0] + ".wav"
+                if os.path.exists(filename):
+                    return filename
+        except Exception:
+            continue
+            
+    # Final fallback attempt with generic settings
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": output_path,
@@ -27,28 +68,11 @@ def download_youtube_audio(url: str) -> str:
         ],
         "quiet": True,
         "nocheckcertificate": True,
-        "user_agent": headers["User-Agent"],
-        "http_headers": headers,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "web", "mweb"]
-            }
-        },
     }
-    
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            raw_filename = ydl.prepare_filename(info)
-            filename = os.path.splitext(raw_filename)[0] + ".wav"
-        return filename
-    except Exception as e:
-        # Fallback without player_client restrict if initial attempt fails
-        ydl_opts.pop("extractor_args", None)
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            raw_filename = ydl.prepare_filename(info)
-            filename = os.path.splitext(raw_filename)[0] + ".wav"
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        raw_filename = ydl.prepare_filename(info)
+        filename = os.path.splitext(raw_filename)[0] + ".wav"
         return filename
 
 
