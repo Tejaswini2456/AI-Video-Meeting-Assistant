@@ -253,30 +253,45 @@ h1, h2, h3, h4, h5, h6 {
     margin-bottom: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: 0.25rem;
 }
 
 .chat-label {
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.15em !important;
+    text-transform: uppercase !important;
 }
 
 .chat-bubble {
     display: inline-block;
-    padding: 0.6rem 1rem;
-    border-radius: 10px;
-    font-size: 0.85rem;
-    line-height: 1.6;
-    max-width: 90%;
+    padding: 0.75rem 1.1rem !important;
+    border-radius: 10px !important;
+    font-size: 0.9rem !important;
+    line-height: 1.6 !important;
+    max-width: 85% !important;
+    color: #ffffff !important;
+    word-break: break-word !important;
 }
 
-.user-label  { color: var(--accent-glow); }
-.bot-label   { color: var(--accent-2); }
+.user-label  { color: #c084fc !important; }
+.bot-label   { color: #22d3ee !important; }
 
-.user-bubble { background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.25); align-self: flex-end; }
-.bot-bubble  { background: rgba(6,182,212,0.1);  border: 1px solid rgba(6,182,212,0.2);   align-self: flex-start; }
+.user-bubble {
+    background: linear-gradient(135deg, #6d28d9 0%, #4c1d95 100%) !important;
+    border: 1px solid #a855f7 !important;
+    color: #ffffff !important;
+    align-self: flex-end !important;
+    box-shadow: 0 4px 12px rgba(109, 40, 217, 0.35) !important;
+}
+
+.bot-bubble  {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
+    border: 1px solid #06b6d4 !important;
+    color: #ffffff !important;
+    align-self: flex-start !important;
+    box-shadow: 0 4px 12px rgba(6, 182, 212, 0.25) !important;
+}
 
 hr {
     border: none !important;
@@ -626,7 +641,7 @@ if st.session_state.result:
     st.markdown("---")
 
     # ── RAG Chat ──────────────────────────────────────────────────────────────
-    st.markdown('<div style="font-family:\'Syne\',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:1rem">💬 Chat with your Meeting</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-family:\'Syne\',sans-serif;font-size:1.25rem;font-weight:700;margin-bottom:1rem;color:#ffffff !important">💬 Chat with your Meeting</div>', unsafe_allow_html=True)
 
     if st.session_state.chat_history:
         chat_html = '<div class="chat-container">'
