@@ -1,5 +1,4 @@
-# ── AI Meeting Assistant ── requirements.txt ──────────────────────────────────
-# Python >= 3.10 recommended
+--extra-index-url https://download.pytorch.org/whl/cpu
 
 # ── Audio / Video acquisition ─────────────────────────────────────────────────
 yt-dlp>=2025.1.26                  # Download audio from YouTube URLs (latest for YouTube 403 fixes)
@@ -10,9 +9,8 @@ ffmpeg-python>=0.2.0              # FFmpeg bindings (FFmpeg binary must be insta
 
 # ── Speech-to-Text (local Whisper) ────────────────────────────────────────────
 openai-whisper>=20231117          # OpenAI Whisper (runs locally)
-torch>=2.2.0                      # PyTorch backend for Whisper
-torchaudio>=2.2.0                 # Audio utilities for PyTorch
-torchvision                       # Required by transformers vision modules
+torch
+torchaudio
 
 # ── Translation (Hindi → English) ─────────────────────────────────────────────
 deep-translator>=1.11.4           # Lightweight translation wrapper (Google backend)
