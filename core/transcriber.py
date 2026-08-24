@@ -36,9 +36,14 @@ INDIAN_LANGUAGES = {
 
 
 def transcribe_chunk_whisper(chunk_path: str, task: str = "transcribe") -> str:
+    try:
+        audio = AudioSegment.from_file(chunk_path)
+        if len(audio) < 500:
+            return ""
+    except Exception:
+        pass
 
     model = load_model()  
-
     result = model.transcribe(chunk_path, task=task)  
     return result["text"]  
 

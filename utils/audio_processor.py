@@ -185,11 +185,16 @@ def chunk_audio(wav_path: str, chunk_minutes: int = 10) -> list:
 
     for i, start in enumerate(range(0, len(audio), chunk_ms)):
         chunk = audio[start: start + chunk_ms]
+        if len(chunk) < 1000:
+            continue
         chunk_path = f"{wav_path}_chunk_{i}.wav"
         chunk.export(chunk_path, format="wav")
 
         chunks.append(chunk_path)
     
+    if not chunks and len(audio) > 0:
+        chunks.append(wav_path)
+
     return chunks
 
 def process_input(source: str) -> tuple:

@@ -371,6 +371,7 @@ with st.sidebar:
         save_dir = "downloades"
         os.makedirs(save_dir, exist_ok=True)
         source = os.path.join(save_dir, uploaded_file.name)
+        uploaded_file.seek(0)
         with open(source, "wb") as f:
             f.write(uploaded_file.getbuffer())
     elif url_input.strip():
