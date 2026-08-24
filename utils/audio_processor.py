@@ -23,8 +23,15 @@ def fetch_youtube_transcript_api(url: str):
         api = YouTubeTranscriptApi() if callable(YouTubeTranscriptApi) else None
         fetched_snippets = None
         
-        # Method 1: Using instance list/fetch (v1.2.4+)
-        if api and hasattr(api, "list"):
+        # Method 1: Try direct fetch (v1.x)
+        if api and hasattr(api, "fetch"):
+            try:
+                fetched_snippets = api.fetch(video_id)
+            except Exception as e_fetch:
+                print(f"api.fetch failed: {e_fetch}")
+        
+        # Method 2: Iterate over transcript list
+        if not fetched_snippets and api and hasattr(api, "list"):
             try:
                 transcript_list = api.list(video_id)
                 for t in transcript_list:
@@ -33,41 +40,65 @@ def fetch_youtube_transcript_api(url: str):
                         break
             except Exception as e1:
                 print(f"api.list failed: {e1}")
-                
-        # Method 2: Using static get_transcript
-        if not fetched_snippets and hasattr(YouTubeTranscriptApi, "get_transcript"):
-            try:
-                raw_data = YouTubeTranscriptApi.get_transcript(video_id)
-                full_text = " ".join([item['text'] if isinstance(item, dict) else item.text for item in raw_data])
-                last_item = raw_data[-1]
-                start_val = last_item['start'] if isinstance(last_item, dict) else last_item.start
-                dur_val = last_item.get('duration', 0.0) if isinstance(last_item, dict) else getattr(last_item, 'duration', 0.0)
-                duration_sec = float(start_val + dur_val)
-                return full_text, duration_sec
-            except Exception as e2:
-                print(f"get_transcript failed: {e2}")
 
         if fetched_snippets:
-            full_text = " ".join([snippet.text if hasattr(snippet, "text") else snippet["text"] for snippet in fetched_snippets])
+            full_text = " ".join([snippet.text if hasattr(snippet, "text") else snippet.get("text", "") if isinstance(snippet, dict) else str(snippet) for snippet in fetched_snippets])
             last_item = fetched_snippets[-1]
-            start_val = last_item.start if hasattr(last_item, "start") else last_item.get("start", 0.0)
-            dur_val = last_item.duration if hasattr(last_item, "duration") else last_item.get("duration", 0.0)
+            start_val = last_item.start if hasattr(last_item, "start") else last_item.get("start", 0.0) if isinstance(last_item, dict) else 0.0
+            dur_val = last_item.duration if hasattr(last_item, "duration") else last_item.get("duration", 0.0) if isinstance(last_item, dict) else 0.0
             duration_sec = float(start_val + dur_val)
-            return full_text, duration_sec
+            if full_text.strip():
+                return full_text, duration_sec
 
     except Exception as e:
         print(f"youtube-transcript-api extraction failed: {e}")
 
     return None, 0.0
 
+def fetch_youtube_transcript_ytdlp(url: str):
+    """Fallback transcript extractor using yt-dlp caption metadata (doesn't trigger 403 audio download block)."""
+    try:
+        import urllib.request
+        import json
+        ydl_opts = {'quiet': True, 'skip_download': True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            duration = float(info.get('duration', 0.0))
+            subs = info.get('subtitles', {}) or {}
+            auto_subs = info.get('automatic_captions', {}) or {}
+            all_subs = {**auto_subs, **subs}
+            
+            preferred_langs = ['en', 'en-US', 'en-GB'] + list(all_subs.keys())
+            for lang in preferred_langs:
+                if lang in all_subs and all_subs[lang]:
+                    formats = all_subs[lang]
+                    json3_fmt = next((f for f in formats if f.get('ext') == 'json3'), None)
+                    if json3_fmt and 'url' in json3_fmt:
+                        req = urllib.request.Request(json3_fmt['url'], headers={'User-Agent': 'Mozilla/5.0'})
+                        with urllib.request.urlopen(req) as res:
+                            data = json.loads(res.read().decode('utf-8'))
+                            events = data.get('events', [])
+                            text_parts = []
+                            for e in events:
+                                segs = e.get('segs', [])
+                                text = ''.join([s.get('utf8', '') for s in segs if 'utf8' in s]).strip()
+                                if text and text != '\n':
+                                    text_parts.append(text)
+                            if text_parts:
+                                return ' '.join(text_parts), duration
+    except Exception as e:
+        print(f"yt-dlp subtitle extraction fallback failed: {e}")
+    return None, 0.0
+
 def download_youtube_audio(url: str) -> str:
     output_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
     
     client_configs = [
+        ["web_creator"],
+        ["mweb"],
         ["ios"],
         ["android_vr"],
         ["tv_embedded"],
-        ["mweb"],
         ["android"],
     ]
     
@@ -159,11 +190,15 @@ def process_input(source: str) -> tuple:
     if source.startswith("http://") or source.startswith("https://"):
         print("Detected YouTube URL. Attempting transcript API extraction...")
         transcript, duration_sec = fetch_youtube_transcript_api(source)
+        if not transcript:
+            print("Transcript API unavailable. Attempting yt-dlp subtitle metadata fallback...")
+            transcript, duration_sec = fetch_youtube_transcript_ytdlp(source)
+
         if transcript:
-            print("Successfully extracted YouTube transcript via API!")
+            print("Successfully extracted YouTube transcript!")
             return transcript, None, duration_sec
         
-        print("Transcript API unavailable. Falling back to audio download via yt-dlp...")
+        print("Subtitles/Transcript unavailable. Falling back to audio download via yt-dlp...")
         wav_path = download_youtube_audio(source)
     else:
         print("Detected local/uploaded file. Converting to WAV...")
