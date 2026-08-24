@@ -364,6 +364,7 @@ with st.sidebar:
     st.markdown('<span class="badge badge-purple">Input Source</span>', unsafe_allow_html=True)
     uploaded_file = st.file_uploader("Upload Media (.mp4, .mp3, .wav, .m4a)", type=["mp4", "mp3", "wav", "m4a", "webm"])
     url_input = st.text_input("Or paste YouTube URL", placeholder="https://youtube.com/watch?v=...")
+    st.caption("💡 *Note: For uncaptioned YouTube videos, please use the File Uploader above.*")
 
     source = ""
     if uploaded_file is not None:
@@ -528,7 +529,20 @@ if run_btn:
             for k in ["audio","transcript","title","summary","extract","rag"]:
                 if st.session_state.pipeline_steps.get(k) == "active":
                     st.session_state.pipeline_steps[k] = "pending"
-            progress_placeholder.error(f"❌ Error: {e}")
+            progress_placeholder.empty()
+            err_str = str(e)
+            if "YouTube 403 Forbidden" in err_str or "403" in err_str or "Forbidden" in err_str:
+                st.warning("""
+                ### ⚠️ YouTube Cloud Audio Download Restricted
+                
+                The YouTube URL you provided does not have subtitles/captions enabled, and YouTube blocks cloud servers (Streamlit Cloud) from downloading raw audio streams.
+                
+                #### 💡 How to process this video:
+                * **Upload Media File Directly**: Download the video/audio file locally and use the **Upload Media (.mp4, .mp3, .wav)** section in the sidebar.
+                * **Try Captioned Videos**: Any YouTube video with Closed Captions (CC) or auto-generated subtitles processes instantly!
+                """)
+            else:
+                st.error(f"❌ Error: {e}")
 
 # ── Results Area ─────────────────────────────────────────────────────────────────
 if st.session_state.result:

@@ -130,6 +130,9 @@ def download_youtube_audio(url: str) -> str:
                 }
             },
         }
+        if os.path.exists("cookies.txt"):
+            ydl_opts["cookiefile"] = "cookies.txt"
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -154,6 +157,9 @@ def download_youtube_audio(url: str) -> str:
         "quiet": True,
         "nocheckcertificate": True,
     }
+    if os.path.exists("cookies.txt"):
+        ydl_opts["cookiefile"] = "cookies.txt"
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
