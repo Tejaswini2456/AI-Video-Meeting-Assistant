@@ -8,7 +8,7 @@ from pydub import AudioSegment
 SARVAM_PIECE_SECONDS = 25
 
 
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 
 
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
@@ -49,7 +49,14 @@ def transcribe_chunk_whisper(chunk_path: str, task: str = "transcribe") -> str:
 
 
 def _get_sarvam_api_key() -> str:
-    return os.getenv("SARVAM_API_KEY") or SARVAM_API_KEY
+    key = os.getenv("SARVAM_API_KEY") or SARVAM_API_KEY
+    if not key:
+        try:
+            import streamlit as st
+            key = st.secrets.get("SARVAM_API_KEY") if hasattr(st, "secrets") else None
+        except Exception:
+            pass
+    return key
 
 def _send_to_sarvam(piece_path: str) -> str:
     """Send one ≤30s WAV file to Sarvam and return the English transcript."""

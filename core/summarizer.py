@@ -7,7 +7,14 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 import os 
 
 def get_llm():
-    return ChatMistralAI(model = "mistral-small-latest", mistral_api_key = os.getenv("MISTRAL_API_KEY"),temperature=0.3)
+    api_key = os.getenv("MISTRAL_API_KEY")
+    if not api_key:
+        try:
+            import streamlit as st
+            api_key = st.secrets.get("MISTRAL_API_KEY") if hasattr(st, "secrets") else None
+        except Exception:
+            pass
+    return ChatMistralAI(model="mistral-small-latest", mistral_api_key=api_key, temperature=0.3)
 
 
 def split_transcript(transcript: str) -> list:

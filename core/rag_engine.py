@@ -6,9 +6,16 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from core.vector_store import build_vector_store, load_vector_store, get_retriever
 
 def get_llm():
+    api_key = os.getenv("MISTRAL_API_KEY")
+    if not api_key:
+        try:
+            import streamlit as st
+            api_key = st.secrets.get("MISTRAL_API_KEY") if hasattr(st, "secrets") else None
+        except Exception:
+            pass
     return ChatMistralAI(
         model="mistral-small-latest",
-        mistral_api_key=os.getenv("MISTRAL_API_KEY"),
+        mistral_api_key=api_key,
         temperature=0.3,
     )
 
