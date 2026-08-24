@@ -1,9 +1,15 @@
+import sys
+import os
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 from dotenv import load_dotenv
 load_dotenv()
 
 import streamlit as st
 import time
-import os
 from utils.audio_processor import process_input
 from core.transcriber import transcribe_all, get_transcription_engine
 from core.summarizer import summarize, generate_title
