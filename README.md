@@ -110,6 +110,13 @@ python main.py
 
 ---
 
+## 👤 Contributor
+
+- **Tejaswini** ([@Tejaswini2456](https://github.com/Tejaswini2456))
+
+---
+
 ## 📜 License
 
 Distributed under the MIT License. See `LICENSE` for more information.
+
